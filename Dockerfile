@@ -1,28 +1,49 @@
 # syntax=docker/dockerfile:1
 #
-# Builds the Inflowenger inflow-inspector-api as a self-contained image.
+# Self-building RUNTIME image for inflow-inspector-api.
 #
-# NOTE: this assumes github.com/Inflowenger/inflow-fusion resolves as a normal
-# Go module (public repo, or private with GOPRIVATE + credentials). While the
-# local `replace` in go.mod points at a sibling checkout, comment it out first —
-# a standalone build can't see a path outside its build context.
+# This image ships only the Go toolchain + git + an entrypoint — it does NOT
+# compile anything at `docker build` time. At container START the entrypoint
+# clones this repo (at $INSPECTOR_API_REF), compiles a binary native to the
+# arch it's actually running on, and execs it. That's why a single published
+# image runs on both amd64 and arm64 with no cross-compiling or buildx tricks:
+# the compile happens on the target machine, at run time.
+#
+# Because nothing is copied in, the build context is irrelevant — you can build
+# and publish this from an empty directory:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -t mehdishokohi/inflow-inspector-api:latest --push - < Dockerfile
+#
+# Persist /src (and optionally /go) on a volume so restarts skip the re-clone
+# and module download — see the getting-started compose file.
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.26-alpine
+
 RUN apk add --no-cache git
-WORKDIR /src
 
-# Cache modules against the manifests first.
-COPY go.mod go.sum ./
-RUN go mod download
+ENV INSPECTOR_API_REPO=https://github.com/Inflowenger/inflow-inspector-api.git \
+    INSPECTOR_API_REF=master \
+    SRC_DIR=/src \
+    PORT=8025
 
-# Build.
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/inflow-inspector-api .
+COPY <<'EOF' /usr/local/bin/entrypoint.sh
+#!/bin/sh
+set -e
+if [ -d "$SRC_DIR/.git" ]; then
+  echo "[entrypoint] updating $SRC_DIR -> $INSPECTOR_API_REF"
+  git -C "$SRC_DIR" fetch --depth 1 origin "$INSPECTOR_API_REF"
+  git -C "$SRC_DIR" checkout -q FETCH_HEAD
+else
+  echo "[entrypoint] cloning $INSPECTOR_API_REPO @ $INSPECTOR_API_REF"
+  git clone --depth 1 -b "$INSPECTOR_API_REF" "$INSPECTOR_API_REPO" "$SRC_DIR"
+fi
+cd "$SRC_DIR"
+echo "[entrypoint] building for $(go env GOOS)/$(go env GOARCH)"
+CGO_ENABLED=0 go build -trimpath -o /app/inflow-inspector-api .
+echo "[entrypoint] starting inflow-inspector-api on :$PORT"
+exec /app/inflow-inspector-api
+EOF
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# ── runtime ──────────────────────────────────────────────────────────────────
-# Root (default) distroless so the BadgerDB store under /data is writable.
-FROM gcr.io/distroless/static-debian12
-WORKDIR /app
-COPY --from=build /out/inflow-inspector-api /app/inflow-inspector-api
 EXPOSE 8025
-ENTRYPOINT ["/app/inflow-inspector-api"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
