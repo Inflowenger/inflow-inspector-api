@@ -1,0 +1,17 @@
+# Local runtime state / secrets — never bake into the image
+db
+data
+*.log
+.env
+.env.*
+
+# VCS / editor / OS cruft
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Docker files themselves
+Dockerfile
+.dockerignore
