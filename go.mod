@@ -3,7 +3,7 @@ module github.com/Inflowenger/inflow-inspector-api
 go 1.26.2
 
 require (
-	github.com/Inflowenger/inflow-fusion v0.1.4
+	github.com/Inflowenger/inflow-fusion v0.1.5
 	github.com/bytedance/sonic v1.15.2
 	github.com/dgraph-io/badger/v4 v4.9.2
 	github.com/go-playground/validator/v10 v10.30.3

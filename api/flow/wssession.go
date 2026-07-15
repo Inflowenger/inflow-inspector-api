@@ -3,7 +3,7 @@ package flowControllers
 import (
 	"fmt"
 	"sync"
-
+	fuselog "github.com/Inflowenger/inflow-fusion/logs"
 	fuse "github.com/Inflowenger/inflow-fusion/inflow"
 	"github.com/gofiber/contrib/v3/socketio"
 	"github.com/nats-io/nats.go"
@@ -58,6 +58,10 @@ func sendInflowLogs() {
 	natsConn.Subscribe("inflow.event.log", func(msg *nats.Msg) {
 		logMessage := string(msg.Data)
 		// fmt.Printf("Received log message: %s\n", logMessage)
+		if f, ok := fuselog.CaptureProcFinish(msg.Data); ok {
+			// f.Pid ended — f.Status, f.DurationMs, f.Error, f.Ts
+			fmt.Printf("Process %s Finished\n",f.Pid)
+		}
 		// Broadcast the log message to all connected WebSocket clients
 		socketio.Broadcast([]byte(logMessage), socketio.TextMessage)
 	})
