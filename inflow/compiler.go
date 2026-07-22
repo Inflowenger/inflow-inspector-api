@@ -2,6 +2,7 @@ package inflow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	compiler "github.com/Inflowenger/inflow-fusion/compilers/vueFlow"
@@ -169,10 +170,13 @@ func NodeBuilder(vfn compiler.VueFlowNode) (*inflowModels.Node, error) {
 
 	case NODE_EXT_SVC:
 		node.Type = inflowModels.ExtrinsicNodeType
-		if subject, ok := nodeData["serviceTopic"].(string); ok {
-			evNode := inflowNodes.NewExtrinsicSvcNode(subject)
-			node.Extrinsic = &evNode.ExtrinsicRule
+		subject, ok := nodeData["serviceTopic"].(string)
+		if !ok{
+			return nil,errors.New("invalid required data")
 		}
+		evNode := inflowNodes.NewExtrinsicSvcNode(subject,inflowNodes.WithOpData(nodeData["operationData"]))
+		
+		node.Extrinsic = &evNode.ExtrinsicRule
 	case NODE_GOTO:
 		node.Type = inflowModels.GoToNodeType
 		gotoNode := inflowNodes.NewGotoNode()
